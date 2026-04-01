@@ -12,6 +12,7 @@
 
 napi_value glewInit(napi_env env, napi_callback_info info) {
 	napi_status status = napi_ok;
+	glewExperimental = GL_TRUE;
 	GLenum err = glewInit();
 	if (GLEW_OK != err) {
 		napi_throw_type_error(env, nullptr, (char *)glewGetErrorString(err));

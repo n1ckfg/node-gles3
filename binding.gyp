@@ -15,10 +15,10 @@
               '-framework OpenGL'
             ],
             'include_dirs': [
-              './node_modules/native-graphics-deps/include'
+              '/opt/homebrew/include'
             ],
             'library_dirs': [
-              '../node_modules/native-graphics-deps/lib/macos/glew'
+              '/opt/homebrew/lib'
             ],
             'xcode_settings': {
               'MACOSX_DEPLOYMENT_TARGET': '10.13',
@@ -82,10 +82,10 @@
           {
             'libraries': [
               '-framework Cocoa',
-              '../node_modules/native-graphics-deps/lib/macos/glfw/libglfw3.a'
+              '/opt/homebrew/lib/libglfw3.a'
             ],
             'include_dirs': [
-              './node_modules/native-graphics-deps/include'
+              '/opt/homebrew/include'
             ],
             'library_dirs': [
             ],

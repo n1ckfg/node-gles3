@@ -431,7 +431,7 @@ napi_value SetWindowMonitor(napi_env env, napi_callback_info info) {
 
 napi_value SetWindowAttrib(napi_env env, napi_callback_info info) {
 	napi_status status = napi_ok;
-	napi_value args[2];
+	napi_value args[3];
 	size_t argc = checkArgCount(env, info, args, 3, 3);
 	GLFWwindow* window = nullptr;
 	napi_valuetype window_type;
