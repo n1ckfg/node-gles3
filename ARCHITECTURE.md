@@ -184,14 +184,26 @@ node-gles3/
 
 ## Platform Support
 
-| Feature | Windows | macOS | Linux |
-|---------|---------|-------|-------|
-| OpenGL ES 3 | Yes | Yes | Yes |
-| GLFW3 | Yes | Yes | Partial |
-| OpenVR | Yes | Yes | Yes |
-| Spout | Yes | No | No |
-| RealSense | Yes | No | No |
-| Audio | Yes | Yes | Yes |
+| Feature | Windows | macOS | Linux x64 | Linux aarch64 |
+|---------|---------|-------|-----------|---------------|
+| OpenGL ES 3 | Yes | Yes | Yes | Yes |
+| GLFW3 | Yes | Yes | Partial | Yes |
+| OpenVR | Yes | Yes | Yes | No |
+| Spout | Yes | No | No | No |
+| RealSense | Yes | No | No | No |
+| Audio | Yes | Yes | Yes | Yes |
+
+### aarch64 Linux
+
+Use the dedicated build script instead of `npm install`:
+
+```bash
+sudo apt install libglew-dev libglfw3-dev libgl1-mesa-dev
+npm install --ignore-scripts
+./build-aarch64.sh
+```
+
+This uses `binding-linux-arm64.gyp` which only builds supported modules (gles3, glfw3, audio).
 
 ## Key Design Decisions
 
