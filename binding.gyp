@@ -98,7 +98,7 @@
           }
         ],
         ['OS=="linux"', {
-          'libraries': []
+          'libraries': ['-lglfw']
           }
         ],
         ['OS=="win"',

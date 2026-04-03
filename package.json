@@ -4,7 +4,7 @@
   "description": "native node bindings to OpenGLES3",
   "main": "index.js",
   "scripts": {
-    "install": "node tools/gen.js && node-gyp rebuild",
+    "install": "node tools/gen.js && mkdir -p build/node_gyp_bins && node-gyp rebuild",
     "vr": "node tools/gen.js && node-gyp rebuild && node vr-test.js"
   },
   "gypfile": true,
@@ -16,7 +16,7 @@
     "jpeg-js": "^0.4.4",
     "native-graphics-deps": "0.0.21",
     "native-openvr-deps": "0.0.19",
-    "node-addon-api": "^3.1.0",
+    "node-addon-api": "^8.7.0",
     "png-js": "1.0.0",
     "pngjs": "^6.0.0",
     "rtsp-stream": "^1.0.0",
