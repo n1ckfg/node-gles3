@@ -1215,15 +1215,17 @@ function createVao(gl, geom, program) {
                     gl.bufferData(gl.ARRAY_BUFFER, geom.colors, gl.STATIC_DRAW);
                     // look up in the shader program where the vertex attributes need to go.
                     let attrLoc = program ? gl.getAttribLocation(program, "a_color") : 3;
-                    // Turn on the attribute
-                    gl.enableVertexAttribArray(attrLoc);
-                    // Tell the attribute how to get data out of buffer (ARRAY_BUFFER)
-                    let size = 4;          // components per iteration
-                    let type = gl.FLOAT;   // the data is 32bit floats
-                    let normalize = false; // don't normalize the data
-                    let stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-                    let offset = 0;        // start at the beginning of the buffer
-                    gl.vertexAttribPointer(attrLoc, size, type, normalize, stride, offset);
+                    if (attrLoc >= 0) {
+                        // Turn on the attribute
+                        gl.enableVertexAttribArray(attrLoc);
+                        // Tell the attribute how to get data out of buffer (ARRAY_BUFFER)
+                        let size = 4;          // components per iteration
+                        let type = gl.FLOAT;   // the data is 32bit floats
+                        let normalize = false; // don't normalize the data
+                        let stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+                        let offset = 0;        // start at the beginning of the buffer
+                        gl.vertexAttribPointer(attrLoc, size, type, normalize, stride, offset);
+                    }
                     // done with buffer:
                     gl.bindBuffer(gl.ARRAY_BUFFER, 0);
                     this.colorBuffer = buffer;
@@ -2090,6 +2092,206 @@ function geomFromOBJ(objcode) {
 	return geom
 }
 
+let _dracoModule = null;
+function getDracoModule() {
+	if (!_dracoModule) {
+		const createDecoderModule = require("./lib/draco/draco_wasm_wrapper.js");
+		const wasmBinary = fs.readFileSync(path.join(__dirname, "lib", "draco", "draco_decoder.wasm"));
+		_dracoModule = createDecoderModule({
+			instantiateWasm(info, receiveInstance) {
+				const instance = new WebAssembly.Instance(new WebAssembly.Module(wasmBinary), info);
+				receiveInstance(instance);
+				return instance.exports;
+			}
+		});
+	}
+	return _dracoModule;
+}
+
+function toVec4Colors(colors, numPoints) {
+	if (colors.length === numPoints * 4) return colors;
+	if (colors.length === numPoints * 3) {
+		const out = new Float32Array(numPoints * 4);
+		for (let i = 0; i < numPoints; i++) {
+			out[i * 4 + 0] = colors[i * 3 + 0];
+			out[i * 4 + 1] = colors[i * 3 + 1];
+			out[i * 4 + 2] = colors[i * 3 + 2];
+			out[i * 4 + 3] = 1.0;
+		}
+		return out;
+	}
+	return colors;
+}
+
+function geomFromGLTF(data) {
+	let buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+	let magic = buf.toString("ascii", 0, 4);
+	let gltf, binChunk = null;
+
+	if (magic === "glTF") {
+		const version = buf.readUInt32LE(4);
+		assert(version === 2, "Only glTF/GLB 2.0 is supported");
+		const totalLength = buf.readUInt32LE(8);
+		let offset = 12;
+		while (offset < totalLength && offset + 8 <= buf.length) {
+			const chunkLength = buf.readUInt32LE(offset);
+			const chunkType = buf.readUInt32LE(offset + 4);
+			const chunkData = buf.subarray(offset + 8, offset + 8 + chunkLength);
+			if (chunkType === 0x4E4F534A) { // "JSON"
+				gltf = JSON.parse(chunkData.toString("utf8"));
+			} else if (chunkType === 0x004E4942) { // "BIN\0"
+				binChunk = chunkData;
+			}
+			offset += 8 + chunkLength;
+		}
+	} else {
+		gltf = typeof data === "string" ? JSON.parse(data) : JSON.parse(buf.toString("utf8"));
+	}
+
+	assert(gltf && gltf.meshes && gltf.meshes.length > 0, "No meshes found in glTF/GLB");
+
+	const TYPE_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
+	const COMPONENT_INFO = {
+		5120: { ArrayType: Int8Array, bytes: 1, normDiv: 127 },
+		5121: { ArrayType: Uint8Array, bytes: 1, normDiv: 255 },
+		5122: { ArrayType: Int16Array, bytes: 2, normDiv: 32767 },
+		5123: { ArrayType: Uint16Array, bytes: 2, normDiv: 65535 },
+		5125: { ArrayType: Uint32Array, bytes: 4, normDiv: 4294967295 },
+		5126: { ArrayType: Float32Array, bytes: 4, normDiv: 1 },
+	};
+
+	function getBufferBytes(bufferIndex) {
+		if (bufferIndex === 0 && binChunk) return binChunk;
+		const b = gltf.buffers[bufferIndex];
+		if (b && b.uri && b.uri.startsWith("data:")) {
+			const base64 = b.uri.split(",")[1];
+			return Buffer.from(base64, "base64");
+		}
+		throw new Error("Unsupported external glTF buffer URI");
+	}
+
+	function readAccessor(accessorIndex, asFloat = false) {
+		const accessor = gltf.accessors[accessorIndex];
+		const bv = gltf.bufferViews[accessor.bufferView];
+		const rawBuf = getBufferBytes(bv.buffer || 0);
+		const numComponents = TYPE_COMPONENTS[accessor.type];
+		const compInfo = COMPONENT_INFO[accessor.componentType];
+		const count = accessor.count;
+		const totalElements = count * numComponents;
+		const byteOffset = (bv.byteOffset || 0) + (accessor.byteOffset || 0);
+		const elementBytes = numComponents * compInfo.bytes;
+		const byteStride = bv.byteStride || elementBytes;
+
+		const dv = new DataView(rawBuf.buffer, rawBuf.byteOffset + byteOffset, (count - 1) * byteStride + elementBytes);
+		const out = asFloat ? new Float32Array(totalElements) : new compInfo.ArrayType(totalElements);
+		const scale = (asFloat && accessor.normalized) ? (1 / compInfo.normDiv) : 1;
+
+		for (let i = 0; i < count; i++) {
+			const base = i * byteStride;
+			for (let c = 0; c < numComponents; c++) {
+				const pos = base + c * compInfo.bytes;
+				let val;
+				switch (accessor.componentType) {
+					case 5120: val = dv.getInt8(pos); break;
+					case 5121: val = dv.getUint8(pos); break;
+					case 5122: val = dv.getInt16(pos, true); break;
+					case 5123: val = dv.getUint16(pos, true); break;
+					case 5125: val = dv.getUint32(pos, true); break;
+					case 5126: val = dv.getFloat32(pos, true); break;
+				}
+				out[i * numComponents + c] = asFloat ? Math.max(-1, val * scale) : val;
+			}
+		}
+		return out;
+	}
+
+	const prim = gltf.meshes[0].primitives[0];
+	if (prim.extensions && prim.extensions.KHR_draco_mesh_compression) {
+		const draco = getDracoModule();
+		const ext = prim.extensions.KHR_draco_mesh_compression;
+		const bv = gltf.bufferViews[ext.bufferView];
+		const rawBuf = getBufferBytes(bv.buffer || 0);
+		const byteOffset = bv.byteOffset || 0;
+		const compressed = new Int8Array(rawBuf.buffer, rawBuf.byteOffset + byteOffset, bv.byteLength);
+
+		const decoder = new draco.Decoder();
+		const decoderBuffer = new draco.DecoderBuffer();
+		decoderBuffer.Init(compressed, bv.byteLength);
+
+		const mesh = new draco.Mesh();
+		const status = decoder.DecodeBufferToMesh(decoderBuffer, mesh);
+		if (!status.ok()) {
+			const msg = status.error_msg();
+			draco.destroy(mesh);
+			draco.destroy(decoderBuffer);
+			draco.destroy(decoder);
+			throw new Error("Draco decode failed: " + msg);
+		}
+
+		const numPoints = mesh.num_points();
+		const numFaces = mesh.num_faces();
+		const numIndices = numFaces * 3;
+
+		function decodeDracoAttribute(dracoAttrId) {
+			const attr = decoder.GetAttributeByUniqueId(mesh, dracoAttrId);
+			const numComponents = attr.num_components();
+			const numValues = numPoints * numComponents;
+			const byteSize = numValues * 4;
+			const ptr = draco._malloc(byteSize);
+			decoder.GetAttributeDataArrayForAllPoints(mesh, attr, draco.DT_FLOAT32, byteSize, ptr);
+			const out = new Float32Array(draco.HEAPF32.buffer, ptr, numValues).slice();
+			draco._free(ptr);
+			return out;
+		}
+
+		const geom = {
+			vertexComponents: 3,
+			vertices: decodeDracoAttribute(ext.attributes.POSITION),
+		};
+		if (ext.attributes.NORMAL !== undefined) {
+			geom.normals = decodeDracoAttribute(ext.attributes.NORMAL);
+		}
+		if (ext.attributes.TEXCOORD_0 !== undefined) {
+			geom.texCoords = decodeDracoAttribute(ext.attributes.TEXCOORD_0);
+		}
+		if (ext.attributes.COLOR_0 !== undefined) {
+			geom.colors = toVec4Colors(decodeDracoAttribute(ext.attributes.COLOR_0), numPoints);
+		}
+
+		const indicesByteSize = numIndices * 4;
+		const indicesPtr = draco._malloc(indicesByteSize);
+		decoder.GetTrianglesUInt32Array(mesh, indicesByteSize, indicesPtr);
+		geom.indices = new Uint32Array(draco.HEAPU32.buffer, indicesPtr, numIndices).slice();
+		draco._free(indicesPtr);
+
+		draco.destroy(mesh);
+		draco.destroy(decoderBuffer);
+		draco.destroy(decoder);
+		return geom;
+	}
+
+	const geom = {
+		vertexComponents: 3,
+		vertices: readAccessor(prim.attributes.POSITION, true),
+	};
+	const numPoints = geom.vertices.length / 3;
+	if (prim.attributes.NORMAL !== undefined) {
+		geom.normals = readAccessor(prim.attributes.NORMAL, true);
+	}
+	if (prim.attributes.TEXCOORD_0 !== undefined) {
+		geom.texCoords = readAccessor(prim.attributes.TEXCOORD_0, true);
+	}
+	if (prim.attributes.COLOR_0 !== undefined) {
+		geom.colors = toVec4Colors(readAccessor(prim.attributes.COLOR_0, true), numPoints);
+	}
+	if (prim.indices !== undefined) {
+		const rawIndices = readAccessor(prim.indices, false);
+		geom.indices = (rawIndices instanceof Uint8Array) ? new Uint16Array(rawIndices) : rawIndices;
+	}
+	return geom;
+}
+const geomFromGLB = geomFromGLTF;
+
 // m4 should be a mat4
 // geom should have vertexComponents 3+
 function geomTransform(geom, m4) {
@@ -2279,6 +2481,8 @@ module.exports = {
     makeOpenCylinder,
 
     geomFromOBJ,
+    geomFromGLTF,
+    geomFromGLB,
     geomAppend,
     geomTransform,
     geomTexTransform,

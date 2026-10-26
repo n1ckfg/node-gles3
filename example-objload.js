@@ -1,4 +1,6 @@
 
+const fs = require("fs")
+const path = require("path")
 const glfw = require("./glfw3.js")
 const { vec2, vec3, vec4, quat, mat2, mat2d, mat3, mat4} = require("gl-matrix")
 const gl = require('./gles3.js') 
@@ -29,27 +31,7 @@ glfw.makeContextCurrent(window);
 console.log(gl.glewInit());
 
 
-let tetraOBJ = `
-v -0.500000 -0.707107 -0.866025
-v -0.500000 -0.707107 0.866025
-v 1.000000 -0.707107 -0.000000
-v 0.000000 0.707107 0.000000
-vt 0.000000 0.000000
-vt 0.500000 0.000000
-vt 1.000000 0.000000
-vt 0.250000 0.375000
-vt 0.750000 0.375000
-vt 0.500000 0.750000
-vn 0.942809 -0.333333 0.000000
-vn -0.471405 -0.333333 0.816497
-vn -0.471405 -0.333333 -0.816497
-vn 0.000000 1.000000 0.000000
-usemtl initialShadingGroup
-f 3/4/1 2/2/2 1/5/3
-f 3/1/1 4/2/4 2/4/2
-f 4/4/4 3/5/1 1/6/3
-f 2/5/2 4/2/4 1/3/3
-`;
+let tetraOBJ = fs.readFileSync(path.join(__dirname, "meshes", "tetra.obj"), "utf-8");
 
 let geomprogram = glutils.makeProgram(gl,
 `#version 330
