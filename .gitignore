@@ -1,3 +1,6 @@
+lichen*.json
+lichen*.js
+
 node_modules/
 build/
 .vscode/
