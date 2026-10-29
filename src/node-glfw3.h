@@ -222,6 +222,11 @@ napi_value CreateWindow(napi_env env, napi_callback_info info) {
 	// GLFWwindow* glfwCreateWindow(int width, int height, const char* title, GLFWmonitor* monitor, GLFWwindow* share)
 	GLFWwindow * win = glfwCreateWindow(width, height, title, monitor, share);
 	napi_value result_value;
+	if (!win) {
+		// creation failed (e.g. requested GL version/profile unsupported); return null so JS can handle it
+		napi_get_null(env, &result_value);
+		return result_value;
+	}
 	status = napi_create_external(env, win, nullptr, nullptr, &result_value);
 
 	// stash a state pointer in the window:
