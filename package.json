@@ -4,7 +4,7 @@
   "description": "native node bindings to OpenGLES3",
   "main": "index.js",
   "scripts": {
-    "install": "node tools/gen.js && mkdir -p build/node_gyp_bins && node-gyp rebuild",
+    "install": "node tools/gen.js && node -e \"require('fs').mkdirSync('build/node_gyp_bins',{recursive:true})\" && node-gyp rebuild",
     "vr": "node tools/gen.js && node-gyp rebuild && node vr-test.js"
   },
   "gypfile": true,

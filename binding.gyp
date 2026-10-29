@@ -240,7 +240,11 @@
     
     {
         "target_name": "realsense",
-        
+
+        # only build on windows if the Intel RealSense SDK is installed
+        "variables": {
+          "has_realsense": "<!(node -p \"+require('fs').existsSync('C:/Program Files (x86)/Intel RealSense SDK 2.0/include/librealsense2/rs.hpp')\")"
+        },
         "defines": [],
         "cflags": ["-std=c++11", "-Wall", "-pedantic", "-O3"],
         "include_dirs": [ 
@@ -250,7 +254,10 @@
         "libraries": [],
         "dependencies": [],
         "conditions": [
-            ['OS=="win"', {
+            ['OS=="win" and has_realsense==0', {
+              'type': 'none'
+            }],
+            ['OS=="win" and has_realsense==1', {
               "sources": [ "src/node-realsense.cpp" ],
               'include_dirs': [
                 "C:\\Program Files (x86)\\Intel RealSense SDK 2.0\\include"
